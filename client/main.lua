@@ -1,37 +1,17 @@
-local playerJob = 'none'
+local onDuty = false
 local infoShown = false
 local delieveryShown = false
 local activePassenger = false
 local taxiBlip
 local taxiPickups = {}
-
------------------------ COMMANDS -----------------------
-RegisterCommand(Config.JobsCommand, function(source, args)
-	-- Get the inputed job
-	local jobName = args[1]
-
-	if playerJob == 'taxi' then
-		-- Show error message
-		ErrorMessage('You are already a taxi driver!')
-	else
-		-- Show success message
-		SuccessMessage('You are now a taxi driver!')
-
-		-- Set player job
-		playerJob = 'taxi'
-
-		-- Run the Create Pickups Function
-		CreateTaxiBlips()
-		CreateTaxiPickups()
-	end
-end, false)
+local taxiBlips = {}
 
 ----------------------- TAXI THREADS -----------------------
 Citizen.CreateThread(function()
 	while true do
 		Citizen.Wait(0)
 
-		if playerJob == 'taxi' and not activePassenger then
+		if onDuty and not activePassenger then
 			for k,v in pairs(taxiPickups) do
 				local pickupCoords = v.pickup
 	
@@ -46,13 +26,11 @@ Citizen.CreateThread(function()
 						local playerVehicle = GetVehiclePedIsIn(PlayerPedId(), false)
 	
 						--Notify
-						if infoShown then
-	
-						else
+						if not infoShown then
 							SuccessMessage('Passenger is entering your vehicle')
 	
 							--Make the ped walk to the vehicle
-							SetPedIntoVehicle(v.id, playerVehicle, 0)
+							SetPedIntoVehicle(v.id, playerVehicle, 2)
 	
 							-- Get street name
 							local streetNameHash = GetStreetNameAtCoord(v.pickup.x, v.pickup.y, v.pickup.z)
@@ -81,7 +59,7 @@ Citizen.CreateThread(function()
 	while true do
 		Citizen.Wait(0)
 
-		if playerJob == 'taxi' and activePassenger then
+		if onDuty and activePassenger then
 			for k,v in pairs(taxiPickups) do
 				while #(GetEntityCoords(PlayerPedId()) - v.dropoff) <= 15.0 do
 					Citizen.Wait(0)
@@ -91,9 +69,7 @@ Citizen.CreateThread(function()
 						DeleteEntity(v.id)
 	
 						--Show message
-						if delieveryShown then
-
-						else
+						if not delieveryShown then
 							SuccessMessage('Delievery Complete!')
 							delieveryShown = true
 						end
@@ -108,6 +84,37 @@ Citizen.CreateThread(function()
 				end
 			end
 		end
+	end
+end)
+
+----------------------- EVENTS -----------------------
+RegisterNetEvent('TaxiJob:Error')
+AddEventHandler('TaxiJob:Error', function(errorDetails)
+	ErrorMessage(errorDetails)
+end)
+
+RegisterNetEvent('TaxiJob:SetActiveDriver')
+AddEventHandler('TaxiJob:SetActiveDriver', function()
+	if onDuty then
+		-- Go off duty
+		InfoMessage('You are no longer a taxi driver!')
+
+		-- Set the player job
+		onDuty = false
+
+		-- Delete the taxi items
+		DeleteTaxiPickups()
+		DeleteTaxiBlips()
+	else
+		-- Show success message
+		SuccessMessage('You are now a taxi driver!')
+
+		-- Set player job
+		onDuty = true
+
+		-- Run the Create Pickups Function
+		CreateTaxiBlips()
+		CreateTaxiPickups()
 	end
 end)
 
@@ -161,6 +168,7 @@ function CreateTaxiBlips()
 		BeginTextCommandSetBlipName("STRING")
 		AddTextComponentString('Taxi Passenger')
 		EndTextCommandSetBlipName(blip)
+		table.insert(taxiBlips, blip)
 	end
 end
 
@@ -194,5 +202,17 @@ function CreateTaxiPickups()
 
 		--Freeze their position
 		FreezeEntityPosition(pickupPed, true)
+	end
+end
+
+function DeleteTaxiPickups()
+	for k,v in pairs(taxiPickups) do
+		DeleteEntity(v.id)
+	end
+end
+
+function DeleteTaxiBlips()
+	for k,v in pairs(taxiBlips) do
+		RemoveBlip(v)
 	end
 end
